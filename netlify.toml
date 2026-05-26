@@ -1,0 +1,7 @@
+[build]
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/"
+  to = "https://jamesdor.github.io/eesti-keele-kursus/"
+  status = 301

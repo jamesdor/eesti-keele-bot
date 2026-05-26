@@ -7,15 +7,12 @@ import os
 import sys
 import json
 import logging
-from datetime import datetime
 
-from telegram import Update, LabeledPrice
+import httpx
+from telegram import Update
 from telegram.ext import (
     Application,
     CommandHandler,
-    PreCheckoutQueryHandler,
-    MessageHandler,
-    filters,
     CallbackContext,
 )
 
@@ -52,91 +49,65 @@ async def start(update: Update, context: CallbackContext) -> None:
         f"Добро пожаловать на курс эстонского языка A1–C1.\n\n"
         f"📚 Материалы: грамматика, лексика, аудирование, тесты, экзамены\n"
         f"🎯 Уровни: от A1 до C1\n"
-        f"💎 Доступ: {PRICE_STARS} ⭐ (Telegram Stars) — раз и навсегда\n\n"
+        f"💎 Доступ: 15€ — раз и навсегда\n\n"
         f"Чтобы купить доступ, нажми /buy"
     )
 
 
+import httpx
+
+
 async def buy(update: Update, context: CallbackContext) -> None:
-    """Send invoice for Telegram Stars payment."""
-    chat_id = update.effective_chat.id
+    """Create Stripe Checkout session and send payment link."""
     user = update.effective_user
+    chat_id = update.effective_chat.id
     logger.info(f"User {user.id} ({user.first_name}) initiated purchase")
 
-    await context.bot.send_invoice(
-        chat_id=chat_id,
-        title="Eesti keele kursus A1-C1",
-        description=(
-            "Полный доступ к курсу эстонского языка.\n"
-            "• 27+ разделов материалов\n"
-            "• Грамматика, лексика, аудио\n"
-            "• Тесты и экзамены\n"
-            "• Закрытый Telegram-канал\n"
-            "• Все обновления бесплатно"
-        ),
-        payload="eesti_course_access",
-        provider_token="",  # empty = Telegram Stars
-        currency="XTR",
-        prices=[LabeledPrice("Курс", PRICE_STARS)],
-        need_name=False,
-        need_phone=False,
-        need_email=False,
-        is_flexible=False,
-    )
+    # Get the Netlify function URL — try local config first, fallback to env
+    netlify_url = config.get("NETLIFY_URL", "")
+    checkout_api = f"{netlify_url}/create-checkout" if netlify_url else None
 
-
-async def pre_checkout(update: Update, context: CallbackContext) -> None:
-    """Answer pre-checkout (always accept)."""
-    query = update.pre_checkout_query
-    await query.answer(ok=True)
-
-
-async def successful_payment(update: Update, context: CallbackContext) -> None:
-    """Handle successful payment — add user to channel."""
-    user = update.effective_user
-    logger.info(f"Payment received from user {user.id} ({user.first_name})")
-
-    channel_link = None
-    if CHANNEL_ID:
-        try:
-            invite = await context.bot.create_chat_invite_link(
-                chat_id=CHANNEL_ID,
-                member_limit=1,
-            )
-            channel_link = invite.invite_link
-            logger.info(f"Invite link created for user {user.id}")
-        except Exception as e:
-            logger.error(f"Failed to create invite link: {e}")
-
-    msg = (
-        f"✅ Оплата получена! Спасибо, {user.first_name}!\n\n"
-        f"📚 Ссылка на курс: {COURSE_URL}\n\n"
-    )
-    if channel_link:
-        msg += (
-            f"🔗 Ссылка для входа в канал (одноразовая):\n"
-            f"{channel_link}\n\n"
+    if not checkout_api:
+        await update.message.reply_text(
+            "⚠️ Оплата временно недоступна. Напишите администратору."
         )
-    msg += "Если возникнут вопросы — пишите."
+        logger.error("NETLIFY_URL not configured in config.json")
+        return
 
-    await update.message.reply_text(msg)
+    await update.message.reply_text("🔄 Создаю ссылку на оплату...")
 
-    # Notify admin
-    if ADMIN_ID:
-        try:
-            await context.bot.send_message(
-                chat_id=ADMIN_ID,
-                text=(
-                    f"💰 Новая продажа!\n"
-                    f"Пользователь: {user.first_name} {user.last_name or ''}\n"
-                    f"ID: {user.id}\n"
-                    f"Username: @{user.username or 'нет'}\n"
-                    f"Сумма: {PRICE_STARS} ⭐\n"
-                    f"Время: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-                ),
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                checkout_api,
+                json={
+                    "telegram_id": user.id,
+                    "first_name": user.first_name,
+                },
             )
-        except Exception as e:
-            logger.error(f"Failed to notify admin: {e}")
+            data = resp.json()
+    except Exception as e:
+        logger.error(f"Failed to create checkout session: {e}")
+        await update.message.reply_text(
+            "❌ Не удалось создать ссылку на оплату. Попробуйте позже."
+        )
+        return
+
+    if resp.status_code != 200 or not data.get("url"):
+        logger.error(f"Checkout API error: {data}")
+        await update.message.reply_text(
+            "❌ Ошибка при создании оплаты. Попробуйте позже."
+        )
+        return
+
+    await update.message.reply_text(
+        f"💳 <b>Оплата курса Eesti keel A1-C1</b>\n\n"
+        f"💰 Цена: 15€\n\n"
+        f"👇 Нажмите на ссылку для оплаты:\n"
+        f"{data['url']}\n\n"
+        f"После успешной оплаты вы получите ссылку на Telegram-канал.",
+        parse_mode="HTML",
+    )
 
 
 async def help_cmd(update: Update, context: CallbackContext) -> None:
@@ -144,7 +115,19 @@ async def help_cmd(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text(
         "/start — Приветствие\n"
         "/buy — Купить доступ к курсу\n"
+        "/id — Мой Telegram ID\n"
         "/help — Помощь"
+    )
+
+
+async def show_id(update: Update, context: CallbackContext) -> None:
+    """Show user their Telegram ID."""
+    user = update.effective_user
+    await update.message.reply_text(
+        f"Твой Telegram ID: `{user.id}`\n\n"
+        f"Вставь его в config.json в поле ADMIN_ID,\n"
+        f"чтобы получать уведомления о продажах.",
+        parse_mode="Markdown",
     )
 
 
@@ -167,9 +150,8 @@ def main() -> None:
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
+    app.add_handler(CommandHandler("id", show_id))
     app.add_handler(CommandHandler("buy", buy))
-    app.add_handler(PreCheckoutQueryHandler(pre_checkout))
-    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     app.add_error_handler(error_handler)
 
     logger.info("Bot started polling...")
