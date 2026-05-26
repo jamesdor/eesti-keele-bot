@@ -54,24 +54,18 @@ async def start(update: Update, context: CallbackContext) -> None:
     )
 
 
-import httpx
-
-
 async def buy(update: Update, context: CallbackContext) -> None:
     """Create Stripe Checkout session and send payment link."""
     user = update.effective_user
     chat_id = update.effective_chat.id
     logger.info(f"User {user.id} ({user.first_name}) initiated purchase")
 
-    # Get the Netlify function URL — try local config first, fallback to env
-    netlify_url = config.get("NETLIFY_URL", "")
-    checkout_api = f"{netlify_url}/create-checkout" if netlify_url else None
-
-    if not checkout_api:
+    stripe_key = config.get("STRIPE_SECRET_KEY", "")
+    if not stripe_key:
         await update.message.reply_text(
             "⚠️ Оплата временно недоступна. Напишите администратору."
         )
-        logger.error("NETLIFY_URL not configured in config.json")
+        logger.error("STRIPE_SECRET_KEY not configured in config.json")
         return
 
     await update.message.reply_text("🔄 Создаю ссылку на оплату...")
@@ -79,10 +73,19 @@ async def buy(update: Update, context: CallbackContext) -> None:
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
-                checkout_api,
-                json={
-                    "telegram_id": user.id,
-                    "first_name": user.first_name,
+                "https://api.stripe.com/v1/checkout/sessions",
+                auth=(stripe_key, ""),
+                data={
+                    "mode": "payment",
+                    "line_items[0][price_data][currency]": "eur",
+                    "line_items[0][price_data][product_data][name]": "Eesti keele kursus A1-C1",
+                    "line_items[0][price_data][product_data][description]": "Полный доступ к курсу эстонского языка. Грамматика, лексика, аудио, тесты, экзамены. Закрытый Telegram-канал.",
+                    "line_items[0][price_data][unit_amount]": "1500",
+                    "line_items[0][quantity]": "1",
+                    "metadata[telegram_id]": str(user.id),
+                    "metadata[first_name]": user.first_name or "",
+                    "success_url": f"https://t.me/EESTIKEELBOT_bot?start=paid_{user.id}",
+                    "cancel_url": "https://t.me/EESTIKEELBOT_bot?start=cancel",
                 },
             )
             data = resp.json()
