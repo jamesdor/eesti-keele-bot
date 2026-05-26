@@ -1,6 +1,7 @@
 {
-  "name": "eesti-keele-payments",
+  "name": "eesti-keele-bot",
   "version": "1.0.0",
+  "private": true,
   "dependencies": {
     "stripe": "^17.0.0"
   }
