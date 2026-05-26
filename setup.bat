@@ -7,17 +7,22 @@ echo.
 echo Установка бота в автозагрузку Windows...
 echo.
 
-:: Создаём задачу в Task Scheduler
-schtasks /create /tn "EestiKeeleBot" /tr "%~dp0start_bot.vbs" /sc onlogon /ru %USERNAME% /f
+:: Устанавливаем через PowerShell
+powershell -ExecutionPolicy Bypass -File "%~dp0install_task.ps1"
 
 if %ERRORLEVEL% equ 0 (
     echo.
     echo Готово! Бот будет запускаться автоматически при входе в систему.
     echo.
-    echo Чтобы запустить сейчас - запусти start_bot.bat
+    echo Сейчас открой config.json и введи:
+    echo   BOT_TOKEN - токен от @BotFather
+    echo   CHANNEL_ID - @username канала
+    echo   ADMIN_ID - твой Telegram ID
+    echo.
+    echo После этого запусти start_bot.bat чтобы проверить
 ) else (
     echo.
-    echo Ошибка при создании задачи. Запусти от имени администратора.
+    echo Ошибка при создании задачи. Запусти setup.bat от имени администратора.
 )
 
 pause
