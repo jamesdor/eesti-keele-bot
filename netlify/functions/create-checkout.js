@@ -1,6 +1,15 @@
 const Stripe = require("stripe");
 
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+let stripe;
+
+function getStripe() {
+  if (!stripe) {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) throw new Error("STRIPE_SECRET_KEY not set in environment");
+    stripe = Stripe(key);
+  }
+  return stripe;
+}
 
 exports.handler = async (event) => {
   const headers = {
@@ -19,7 +28,7 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: "telegram_id required" }) };
     }
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       mode: "payment",
       line_items: [
         {

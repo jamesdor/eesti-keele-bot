@@ -1,11 +1,25 @@
 const Stripe = require("stripe");
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-const TELEGRAM_API = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}`;
+let stripe;
+function getStripe() {
+  if (!stripe) {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) throw new Error("STRIPE_SECRET_KEY not set in environment");
+    stripe = Stripe(key);
+  }
+  return stripe;
+}
+
+function getTelegramApi() {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) throw new Error("TELEGRAM_BOT_TOKEN not set");
+  return `https://api.telegram.org/bot${token}`;
+}
+
 const CHANNEL_ID = process.env.CHANNEL_ID;
 
 async function sendTelegram(chatId, text) {
-  const res = await fetch(`${TELEGRAM_API}/sendMessage`, {
+  const res = await fetch(`${getTelegramApi()}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -23,7 +37,7 @@ async function sendTelegram(chatId, text) {
 
 async function createInviteLink() {
   if (!CHANNEL_ID) return null;
-  const res = await fetch(`${TELEGRAM_API}/createChatInviteLink`, {
+  const res = await fetch(`${getTelegramApi()}/createChatInviteLink`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -48,7 +62,7 @@ exports.handler = async (event) => {
   const sig = event.headers["stripe-signature"];
   let stripeEvent;
   try {
-    stripeEvent = stripe.webhooks.constructEvent(
+    stripeEvent = getStripe().webhooks.constructEvent(
       event.body,
       sig,
       process.env.STRIPE_WEBHOOK_SECRET
@@ -70,7 +84,6 @@ exports.handler = async (event) => {
 
     console.log(`Payment completed for telegram_id: ${telegramId}`);
 
-    // Create invite link
     const inviteLink = await createInviteLink();
 
     let message = `<b>✅ Оплата получена! Спасибо, ${firstName}!</b>\n\n`;
@@ -82,7 +95,6 @@ exports.handler = async (event) => {
 
     await sendTelegram(telegramId, message);
 
-    // Notify admin
     if (process.env.ADMIN_ID) {
       const adminMsg = `<b>💰 Новая продажа!</b>\nПользователь: ${firstName}\nID: ${telegramId}`;
       await sendTelegram(process.env.ADMIN_ID, adminMsg);
