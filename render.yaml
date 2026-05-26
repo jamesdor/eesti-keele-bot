@@ -1,0 +1,15 @@
+services:
+  - type: worker
+    name: eesti-keele-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: CHANNEL_ID
+        sync: false
+      - key: PRICE_STARS
+        value: 100
+      - key: ADMIN_ID
+        sync: false
