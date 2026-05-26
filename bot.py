@@ -5,7 +5,7 @@ Telegram Stars payment + auto-add to channel
 
 import os
 import sys
-import asyncio
+import json
 import logging
 from datetime import datetime
 
@@ -20,11 +20,22 @@ from telegram.ext import (
 )
 
 # === CONFIG ===
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-CHANNEL_ID = os.environ.get("CHANNEL_ID", "")  # e.g., @channel or -1001234567890
-PRICE_STARS = int(os.environ.get("PRICE_STARS", 100))  # price in ⭐
-COURSE_URL = "https://jamesdor.github.io/eesti-keele-kursus/"
-ADMIN_ID = int(os.environ.get("ADMIN_ID", "0"))  # your Telegram user ID for notifications
+CONFIG_FILE = os.path.join(os.path.dirname(__file__), "config.json")
+
+def load_config():
+    if not os.path.exists(CONFIG_FILE):
+        logger.error(f"Config file not found: {CONFIG_FILE}")
+        sys.exit(1)
+    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+    return cfg
+
+config = load_config()
+BOT_TOKEN = config.get("BOT_TOKEN", "")
+CHANNEL_ID = config.get("CHANNEL_ID", "")
+PRICE_STARS = int(config.get("PRICE_STARS", 100))
+COURSE_URL = config.get("COURSE_URL", "https://jamesdor.github.io/eesti-keele-kursus/")
+ADMIN_ID = int(config.get("ADMIN_ID", "0"))
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
