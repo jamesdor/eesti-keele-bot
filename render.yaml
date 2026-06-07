@@ -10,6 +10,6 @@ services:
       - key: CHANNEL_ID
         sync: false
       - key: PRICE_STARS
-        value: 100
+        value: 1000
       - key: ADMIN_ID
         sync: false
