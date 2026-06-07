@@ -18,9 +18,14 @@ from telegram.ext import (
     CallbackContext,
 )
 
+LOG_FILE = os.path.join(os.path.dirname(__file__), "bot_runtime.log")
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
+    handlers=[
+        logging.FileHandler(LOG_FILE, encoding="utf-8"),
+        logging.StreamHandler(),
+    ],
 )
 logger = logging.getLogger(__name__)
 
